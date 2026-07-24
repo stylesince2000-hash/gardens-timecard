@@ -210,7 +210,6 @@
     <div class="p-head">
       <div class="avatar" id="pAvatar"></div>
       <div class="p-meta">
-        <div class="en" id="pEn">従業員番号：</div>
         <div class="nm" id="pName">氏名：</div>
       </div>
       <div class="p-status" id="pStatus">未出勤</div>
@@ -346,9 +345,8 @@ function renderAll(){
 
 function seed(){
   const names=['上園田香代子','富崎安枝','吉川祥美','福島由美子','吉川真吾','辻崎智徳'];
-  const nos=[1,2,3,4,6,7];
   const employees=names.map((n,i)=>({
-    id:uid(), no:nos[i], name:n, color:AV_COLORS[i%AV_COLORS.length],
+    id:uid(), name:n, color:AV_COLORS[i%AV_COLORS.length],
     female:i<4, memo:''
   }));
   return {
@@ -451,7 +449,7 @@ function hrs(ms){ return (ms/3600000).toFixed(1); }
 /* ============ 描画：メンバー一覧 ============ */
 function renderMembers(){
   const wrap=document.getElementById('members');
-  const list=[...store.employees].sort((a,b)=>a.no-b.no);
+  const list=store.employees.slice();
   if(!list.length){ wrap.innerHTML='<div class="empty" style="grid-column:1/-1">従業員が登録されていません。<br>管理画面から追加してください。</div>';return; }
   wrap.innerHTML=list.map(e=>{
     const st=statusOf(e.id);
@@ -459,7 +457,6 @@ function renderMembers(){
       <div class="corner"></div>
       <div class="badge ${BADGE[st]}">${st}</div>
       <div class="avatar">${avatarSVG(e,54)}</div>
-      <div class="mno">担当：No.${e.no}</div>
       <div class="mname">${esc(e.name)}</div>
     </div>`;
   }).join('');
@@ -473,7 +470,6 @@ function openPunch(id){
 function showPunch(){
   const e=curEmp;
   document.getElementById('pAvatar').innerHTML=avatarSVG(e,64);
-  document.getElementById('pEn').textContent=`従業員番号：${e.no}`;
   document.getElementById('pName').textContent=`氏名：${e.name}`;
   refreshPunchUI();
   openModal('modal-punch');
@@ -557,25 +553,23 @@ function admTab(p){
 }
 
 function renderEmpPane(){
-  const list=[...store.employees].sort((a,b)=>a.no-b.no);
+  const list=store.employees.slice();
   const rows=list.map(e=>`<tr>
-    <td class="num">${e.no}</td>
     <td><span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:${e.color};vertical-align:middle;margin-right:8px"></span>${esc(e.name)}</td>
     <td>${statusOf(e.id)}</td>
     <td style="text-align:right;white-space:nowrap">
       <button class="mini" onclick="admEdit('${e.id}')">編集</button>
       <button class="mini danger" onclick="admDelEmp('${e.id}')">削除</button></td></tr>`).join('')
-    ||'<tr><td colspan="4" class="empty">従業員がいません</td></tr>';
+    ||'<tr><td colspan="3" class="empty">従業員がいません</td></tr>';
   document.getElementById('pane-emp').innerHTML=`
     <div class="toolbar"><button class="mini go" onclick="admEdit(null)">＋ 従業員を追加</button></div>
-    <table><thead><tr><th>No</th><th>氏名</th><th>状態</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    <table><thead><tr><th>氏名</th><th>状態</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function admEdit(id){
-  const e=id?store.employees.find(x=>x.id===id):{id:null,no:nextNo(),name:'',color:AV_COLORS[store.employees.length%AV_COLORS.length],female:true,memo:''};
+  const e=id?store.employees.find(x=>x.id===id):{id:null,name:'',color:AV_COLORS[store.employees.length%AV_COLORS.length],female:true,memo:''};
   gen(empForm(e,false));
   bindSwatches();
 }
-function nextNo(){ const ns=store.employees.map(e=>e.no); let n=1; while(ns.includes(n))n++; return n; }
 function empForm(e,fromPunch){
   return `<h3 style="margin-top:0">${e.id?'従業員の編集':'従業員の追加'}</h3>
     <input type="hidden" id="ef-id" value="${e.id||''}">
@@ -585,12 +579,8 @@ function empForm(e,fromPunch){
         <div style="font-size:12px;color:var(--ink-soft);margin-top:6px;font-weight:700">プレビュー</div>
       </div>
       <div style="flex:1;min-width:250px">
-        <div class="row-inline">
-          <div class="field" style="width:100px"><label>従業員番号</label>
-            <input id="ef-no" type="tel" inputmode="numeric" value="${e.no||''}"></div>
-          <div class="field" style="flex:1;min-width:150px"><label>氏名</label>
-            <input id="ef-name" value="${esc(e.name||'')}"></div>
-        </div>
+        <div class="field"><label>氏名</label>
+          <input id="ef-name" value="${esc(e.name||'')}"></div>
         <div class="field"><label>アイコン（性別）</label>
           <select id="ef-female" onchange="avPrev()"><option value="1" ${e.female?'selected':''}>女性</option><option value="0" ${!e.female?'selected':''}>男性</option></select></div>
       </div>
@@ -616,17 +606,15 @@ function bindSwatches(){
 }
 function saveEmp(fromPunch){
   const id=document.getElementById('ef-id').value;
-  const no=parseInt(document.getElementById('ef-no').value,10);
   const name=document.getElementById('ef-name').value.trim();
   if(!name){ toast('氏名を入力してください');return; }
-  if(!no&&no!==0){ toast('従業員番号を入力してください');return; }
   const female=document.getElementById('ef-female').value==='1';
   if(id){
     const e=store.employees.find(x=>x.id===id);
-    e.no=no; e.name=name; e.color=pickColor; e.female=female;
+    e.name=name; e.color=pickColor; e.female=female;
     if(fromPunch&&curEmp&&curEmp.id===id)curEmp=e;
   }else{
-    store.employees.push({id:uid(),no,name,color:pickColor,female,memo:''});
+    store.employees.push({id:uid(),name,color:pickColor,female,memo:''});
   }
   save(); closeModal('modal-generic');
   if(fromPunch){ showPunch(); } else renderEmpPane();
@@ -648,7 +636,7 @@ function renderRecPane(){
     <div class="toolbar">
       <div class="field" style="margin:0"><label>月</label><input id="rec-month" type="month" value="${ym}" onchange="renderRecTable()"></div>
       <div class="field" style="margin:0"><label>従業員</label><select id="rec-emp" onchange="renderRecTable()">
-        <option value="">全員（月間集計）</option>${store.employees.slice().sort((a,b)=>a.no-b.no).map(e=>`<option value="${e.id}">No.${e.no} ${esc(e.name)}</option>`).join('')}</select></div>
+        <option value="">全員（月間集計）</option>${store.employees.slice().map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}</select></div>
       <div style="flex:1"></div>
       <button class="mini go" onclick="admAddRec()">＋ 打刻を手動追加</button>
       <button class="mini" onclick="exportMonthCSV()">この月をCSV書き出し</button>
@@ -703,18 +691,18 @@ function renderRecTable(){
         ${esc(e.name)}／${y}年${m}月　出勤 ${days.length}日　合計労働 <b style="color:var(--ink)">${hrs(totalWork)} 時間</b></div>
       <table><thead><tr><th>日付</th><th>出勤</th><th>退勤</th><th>休憩</th><th>労働時間</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   }else{
-    const list=store.employees.slice().sort((a,b)=>a.no-b.no);
+    const list=store.employees.slice();
     let any=false;
     const rows=list.map(e=>{
       const wd=workedDays(e.id,from,to), w=workMs(e.id,from,to), avg=avgClockOut(e.id,from,to)||'—';
       if(wd||w) any=true;
       return `<tr style="cursor:pointer" onclick="document.getElementById('rec-emp').value='${e.id}';renderRecTable()">
-        <td class="num">${e.no}</td><td>${esc(e.name)}</td>
+        <td>${esc(e.name)}</td>
         <td class="num">${wd} 日</td><td class="num"><b>${hrs(w)}</b> 時間</td><td class="num">${avg}</td></tr>`;
     }).join('');
     wrap.innerHTML=`
       <div style="margin-bottom:10px;color:var(--ink-soft);font-weight:700">${y}年${m}月の月間集計（行をタップで個人の日別へ）</div>
-      <table><thead><tr><th>No</th><th>氏名</th><th>出勤日数</th><th>労働時間</th><th>平均退勤</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><thead><tr><th>氏名</th><th>出勤日数</th><th>労働時間</th><th>平均退勤</th></tr></thead><tbody>${rows}</tbody></table>
       ${any?'':'<div class="empty">この月の記録はありません</div>'}`;
   }
 }
@@ -744,7 +732,7 @@ function recForm(r,pre){
   gen(`<h3 style="margin-top:0">${r?'打刻の訂正':'打刻の手動追加'}</h3>
     <input type="hidden" id="rf-id" value="${r?r.id:''}">
     <div class="field"><label>従業員</label><select id="rf-emp">
-      ${store.employees.slice().sort((a,b)=>a.no-b.no).map(e=>`<option value="${e.id}" ${selEmp===e.id?'selected':''}>No.${e.no} ${esc(e.name)}</option>`).join('')}</select></div>
+      ${store.employees.slice().map(e=>`<option value="${e.id}" ${selEmp===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select></div>
     <div class="row-inline">
       <div class="field"><label>日付</label><input id="rf-date" type="date" value="${defDate}"></div>
       <div class="field" style="width:120px"><label>時刻</label><input id="rf-time" type="time" value="${hh}:${mm}"></div>
@@ -780,9 +768,9 @@ function exportMonthCSV(){
     rows.push(['合計','','','','',hrs(tot)]);
     fname=`打刻_${ym}_${e.name}.csv`;
   }else{
-    rows=[['No','氏名','出勤日数','労働時間合計(h)','平均退勤']];
-    store.employees.slice().sort((a,b)=>a.no-b.no).forEach(e=>{
-      rows.push([e.no,e.name,workedDays(e.id,from,to),hrs(workMs(e.id,from,to)),avgClockOut(e.id,from,to)||'']);
+    rows=[['氏名','出勤日数','労働時間合計(h)','平均退勤']];
+    store.employees.slice().forEach(e=>{
+      rows.push([e.name,workedDays(e.id,from,to),hrs(workMs(e.id,from,to)),avgClockOut(e.id,from,to)||'']);
     });
     fname=`打刻集計_${ym}.csv`;
   }
@@ -792,12 +780,12 @@ function exportMonthCSV(){
 }
 
 function exportCSV(){
-  const rows=[['日付','時刻','従業員No','氏名','種別']];
+  const rows=[['日付','時刻','氏名','種別']];
   store.records.slice().sort((a,b)=>a.t-b.t).forEach(r=>{
     const e=store.employees.find(x=>x.id===r.emp);const d=new Date(r.t);
     rows.push([`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`,
       `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`,
-      e?e.no:'',e?e.name:'(削除)',r.type]);
+      e?e.name:'(削除)',r.type]);
   });
   const csv='﻿'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
   const a=document.createElement('a');
@@ -863,9 +851,10 @@ function showHelp(){
 let pwState=null;
 function askPassword(title,correct,onok){
   if(!correct){ onok(); return; }
-  pwState={correct,onok,buf:''};
+  const len=String(correct).length;
+  pwState={correct:String(correct),onok,buf:'',len};
   gen(`<h3 style="margin-top:0">${title}</h3>
-    <div class="pwdots" id="pwdots">${'<span></span>'.repeat(4)}</div>
+    <div class="pwdots" id="pwdots">${'<span></span>'.repeat(len)}</div>
     <div class="pad">
       ${[1,2,3,4,5,6,7,8,9].map(n=>`<button onclick="pwKey('${n}')">${n}</button>`).join('')}
       <button onclick="pwKey('back')">←</button>
@@ -873,18 +862,20 @@ function askPassword(title,correct,onok){
       <button onclick="pwKey('ok')">OK</button>
     </div>`);
 }
+function pwDots(){
+  const d=document.getElementById('pwdots'); if(!d)return;
+  d.innerHTML=Array.from({length:pwState.len},(_,i)=>`<span class="${i<pwState.buf.length?'f':''}"></span>`).join('');
+}
 function pwKey(k){
   if(k==='back') pwState.buf=pwState.buf.slice(0,-1);
   else if(k==='ok'){ tryPw(); return; }
-  else if(pwState.buf.length<8) pwState.buf+=k;
-  const dots=document.getElementById('pwdots');
-  const n=Math.max(4,pwState.buf.length);
-  dots.innerHTML=Array.from({length:n},(_,i)=>`<span class="${i<pwState.buf.length?'f':''}"></span>`).join('');
-  if(pwState.buf.length>=String(pwState.correct).length && pwState.buf.length>=4 && pwState.buf===String(pwState.correct)) tryPw();
+  else if(pwState.buf.length<pwState.len) pwState.buf+=k;
+  pwDots();
+  if(pwState.buf.length===pwState.len && pwState.buf===pwState.correct) tryPw();
 }
 function tryPw(){
-  if(pwState.buf===String(pwState.correct)){ const cb=pwState.onok; closeModal('modal-generic'); pwState=null; cb(); }
-  else{ toast('暗証番号が違います'); pwState.buf=''; document.getElementById('pwdots').innerHTML='<span></span>'.repeat(4); }
+  if(pwState.buf===pwState.correct){ const cb=pwState.onok; closeModal('modal-generic'); pwState=null; cb(); }
+  else{ toast('パスワードが違います'); pwState.buf=''; pwDots(); }
 }
 
 let toastT;

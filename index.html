@@ -89,7 +89,7 @@
   .badge{align-self:flex-start;font-size:12px;font-weight:800;color:#fff;
     padding:4px 12px;border-radius:6px;}
   .b-out{background:var(--g-gray);}     /* 未出勤 */
-  .b-in{background:var(--g-green);}      /* 出勤 */
+  .b-in{background:var(--g-red);}        /* 出勤中 */
   .b-break{background:var(--g-blue);}    /* 休憩 */
   .b-away{background:var(--g-orange);}   /* 外出 */
   .b-done{background:var(--brown2);}     /* 退勤 */
@@ -118,10 +118,11 @@
   .p-head .avatar svg{width:64px;height:64px;}
   .p-meta .en{font-size:13px;color:var(--ink-soft);font-weight:600;}
   .p-meta .nm{font-size:26px;font-weight:800;color:var(--ink);}
-  .p-status{margin-left:auto;font-size:14px;font-weight:800;color:#fff;padding:6px 16px;border-radius:8px;}
+  .nm-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .p-status{font-size:14px;font-weight:800;color:#fff;padding:5px 14px;border-radius:8px;white-space:nowrap;}
   .p-hint{text-align:center;color:var(--ink-soft);font-weight:600;margin:10px 0 14px;}
   .p-actions{width:100%;}
-  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
   .abtn{padding:30px 6px;border-radius:12px;border:none;font-size:22px;font-weight:800;
     color:var(--ink);background:#f4ecd6;box-shadow:var(--shadow);cursor:pointer;}
   .abtn:active{transform:translateY(1px);}
@@ -206,7 +207,7 @@
     /* モーダル・打刻画面 */
     .sheet{padding:16px 14px 18px;}
     .abtn{padding:22px 4px;font-size:19px;}
-    .grid3{gap:10px;}
+    .grid2{gap:10px;}
     .subrow{gap:8px;}
     .p-head .avatar,.p-head .avatar svg{width:52px;height:52px;}
     .p-meta .nm{font-size:20px;}
@@ -253,15 +254,16 @@
     <div class="p-head">
       <div class="avatar" id="pAvatar"></div>
       <div class="p-meta">
-        <div class="nm" id="pName">氏名：</div>
+        <div class="nm-row">
+          <span class="nm" id="pName">氏名：</span>
+          <span class="p-status" id="pStatus">未出勤</span>
+        </div>
       </div>
-      <div class="p-status" id="pStatus">未出勤</div>
     </div>
     <div class="p-hint">いずれかのボタンを押してください</div>
     <div class="p-actions">
-      <div class="grid3">
-        <button class="abtn primary" data-a="出勤" onclick="punch('出勤')">出勤</button>
-        <button class="abtn warn" data-a="退勤" onclick="punch('退勤')">退勤</button>
+      <div class="grid2">
+        <button class="abtn primary" id="workBtn" onclick="punchWork()">出勤</button>
         <button class="abtn" id="breakBtn" onclick="punchBreak()">休憩開始</button>
       </div>
       <div class="subrow">
@@ -509,6 +511,7 @@ function statusOf(empId){
   return '未出勤';
 }
 const BADGE={'未出勤':'b-out','出勤':'b-in','休憩':'b-break','退勤':'b-done'};
+const STATUS_LABEL={'未出勤':'未出勤','出勤':'出勤中','休憩':'休憩中','退勤':'退勤'};
 
 // 労働時間(ms) 期間内。休憩は除外。
 function workMs(empId,from,to){
@@ -548,7 +551,7 @@ function renderMembers(){
     const st=statusOf(e.id);
     return `<div class="mcard" onclick="openPunch('${e.id}')">
       <div class="corner"></div>
-      <div class="badge ${BADGE[st]}">${st}</div>
+      <div class="badge ${BADGE[st]}">${STATUS_LABEL[st]}</div>
       <div class="avatar">${avatarSVG(e,54)}</div>
       <div class="mname">${esc(e.name)}</div>
     </div>`;
@@ -570,20 +573,26 @@ function showPunch(){
 function refreshPunchUI(){
   const st=statusOf(curEmp.id);
   const sd=document.getElementById('pStatus');
-  sd.textContent=st;
+  sd.textContent=STATUS_LABEL[st];
   sd.className='p-status '+BADGE[st];
   updatePunchButtons(st);
 }
 function updatePunchButtons(st){
-  const canIn=st==='未出勤'||st==='退勤';
-  const canOut=st==='出勤';
-  const canBreak=st==='出勤'||st==='休憩';
-  document.querySelector('#modal-punch [data-a="出勤"]').disabled=!canIn;
-  document.querySelector('#modal-punch [data-a="退勤"]').disabled=!canOut;
+  const wb=document.getElementById('workBtn');
   const bb=document.getElementById('breakBtn');
+  // 出勤/退勤トグル：勤務中は「退勤」、それ以外は「出勤」。休憩中は先に休憩戻りが必要なので無効。
+  if(st==='出勤'){ wb.textContent='退勤'; wb.className='abtn warn'; wb.disabled=false; }
+  else if(st==='休憩'){ wb.textContent='退勤'; wb.className='abtn warn'; wb.disabled=true; }
+  else { wb.textContent='出勤'; wb.className='abtn primary'; wb.disabled=false; }
+  // 休憩トグル
+  const canBreak=st==='出勤'||st==='休憩';
   bb.disabled=!canBreak;
   bb.textContent= st==='休憩' ? '休憩戻り' : '休憩開始';
   bb.classList.toggle('onbreak', st==='休憩');
+}
+function punchWork(){
+  if(!curEmp)return;
+  punch(statusOf(curEmp.id)==='出勤' ? '退勤' : '出勤');
 }
 function punchBreak(){
   if(!curEmp)return;
@@ -648,7 +657,7 @@ function renderEmpPane(){
   const list=store.employees.slice();
   const rows=list.map(e=>`<tr>
     <td><span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:${e.color};vertical-align:middle;margin-right:8px"></span>${esc(e.name)}</td>
-    <td>${statusOf(e.id)}</td>
+    <td>${STATUS_LABEL[statusOf(e.id)]}</td>
     <td style="text-align:right;white-space:nowrap">
       <button class="mini" onclick="admEdit('${e.id}')">編集</button>
       <button class="mini danger" onclick="admDelEmp('${e.id}')">削除</button></td></tr>`).join('')

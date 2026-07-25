@@ -4,13 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="タイムカード">
-<meta name="theme-color" content="#49351f">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" type="image/png" href="icon.png">
-<link rel="manifest" href="manifest.json">
 <title>GARDENS タイムカード</title>
 <style>
   :root{
@@ -75,7 +72,7 @@
   .selhint{text-align:center;color:var(--ink-soft);font-size:16px;font-weight:600;margin:2px 0 12px;}
   .members{
     flex:1;overflow-y:auto;
-    display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));
     gap:14px;align-content:start;
     padding:14px 12px;margin:0 4px;
     background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.5);
@@ -99,7 +96,7 @@
   .avatar{width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
   .avatar svg{width:54px;height:54px;}
   .mno{font-size:12px;color:var(--ink-soft);font-weight:600;}
-  .mname{font-size:18px;font-weight:700;color:var(--ink);text-align:center;line-height:1.2;}
+  .mname{font-size:27px;font-weight:800;color:var(--ink);text-align:center;line-height:1.15;}
   .foot{display:flex;justify-content:space-between;align-items:center;color:var(--ink-soft);font-size:12px;padding:6px 10px 2px;font-weight:600;}
   #syncBadge{font-weight:700;}
 
@@ -204,7 +201,7 @@
     .gear svg{width:22px;height:22px;}
     .selhint{font-size:14px;margin:2px 0 8px;}
     .members{grid-template-columns:repeat(2,1fr);gap:10px;padding:10px;}
-    .mname{font-size:16px;}
+    .mname{font-size:23px;}
     .avatar,.avatar svg{width:48px;height:48px;}
     /* モーダル・打刻画面 */
     .sheet{padding:16px 14px 18px;}

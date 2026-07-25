@@ -289,12 +289,13 @@ function load(){
   try{ s=JSON.parse(localStorage.getItem(KEY)); }catch(e){}
   return migrate(s);
 }
-function save(){
+// store.records は recMap（正本）から都度組み立て、丸ごとローカル保存
+function saveLocal(){
+  store.records=[...recMap.values()];
   try{ localStorage.setItem(KEY,JSON.stringify(store)); }catch(e){}
-  if(cloud.on&&cloud.ref){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ cloud.ref.set(store).catch(()=>{}); },300); }
 }
 
-/* ---------- クラウド同期（Firebase・任意） ---------- */
+/* ---------- クラウド同期（Firebase・任意 / 記録は1件ずつ同期） ---------- */
 const FIREBASE_CONFIG={
   apiKey:"AIzaSyC8JDLV0ByHq-dWB_E97cnv_DVIOmndqPU",
   authDomain:"lounge-ako.firebaseapp.com",
@@ -305,24 +306,73 @@ const FIREBASE_CONFIG={
   appId:"1:566425981436:web:c72b2c7e6bf5d3f6a82279"
 };
 const ROOM='gardens-timecard-main';   // 店舗ID（同じURL＝同じデータ）
-let cloud={on:false,ref:null};
-let saveTimer=null;
+let cloud={on:false,meta:null,records:null};
+let recMap=new Map();                 // id -> {id,emp,t,type}（記録の正本）
+let metaTimer=null,renderTimer=null;
 function hasFirebase(){ return FIREBASE_CONFIG&&FIREBASE_CONFIG.apiKey&&typeof firebase!=='undefined'; }
+function metaObj(){ return {store_name:store.store_name,admin_pass:store.admin_pass,footer:store.footer,employees:store.employees}; }
+// 設定・従業員（メタ情報）を保存（小さいので丸ごと）
+function saveMeta(){
+  saveLocal();
+  if(cloud.on&&cloud.meta){ clearTimeout(metaTimer); metaTimer=setTimeout(()=>{ cloud.meta.set(metaObj()).catch(()=>{}); },300); }
+}
+// 打刻を1件だけ保存/更新
+function putRecord(rec){
+  recMap.set(rec.id,rec); saveLocal();
+  if(cloud.on&&cloud.records) cloud.records.child(rec.id).set({emp:rec.emp,t:rec.t,type:rec.type}).catch(()=>{});
+}
+function delRecord(id){
+  recMap.delete(id); saveLocal();
+  if(cloud.on&&cloud.records) cloud.records.child(id).remove().catch(()=>{});
+}
+function delRecordsBulk(ids){
+  ids.forEach(id=>recMap.delete(id)); saveLocal();
+  if(cloud.on&&cloud.records&&ids.length){ const u={}; ids.forEach(id=>u[id]=null); cloud.records.update(u).catch(()=>{}); }
+}
+function clearRecordsAll(){
+  recMap.clear(); saveLocal();
+  if(cloud.on&&cloud.records) cloud.records.remove().catch(()=>{});
+}
+function scheduleRender(){ clearTimeout(renderTimer); renderTimer=setTimeout(()=>{ saveLocal(); renderAll(); },180); }
 function initCloud(){
   store=load();
+  recMap=new Map((store.records||[]).map(r=>[r.id,r]));
   if(hasFirebase()){
     try{
       if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-      cloud.ref=firebase.database().ref('rooms/'+ROOM);
+      const base=firebase.database().ref('rooms/'+ROOM);
+      cloud.meta=base.child('meta');
+      cloud.records=base.child('records');
       cloud.on=true;
-      cloud.ref.on('value',snap=>{
-        const v=snap.val();
-        if(v&&v.employees){ store=migrate(v); try{localStorage.setItem(KEY,JSON.stringify(store));}catch(e){} renderAll(); }
-        else if(cloud.ref){ cloud.ref.set(store).catch(()=>{}); }   // クラウドが空なら現在のデータで初期化
-      });
+      // 旧構造（トップ階層にemployees/records）からの1回だけの移行
+      base.once('value').then(snap=>{
+        const v=snap.val()||{};
+        if(v.employees && !v.meta){
+          cloud.meta.set({store_name:v.store_name,admin_pass:v.admin_pass,footer:v.footer,employees:v.employees}).catch(()=>{});
+          if(Array.isArray(v.records)&&v.records.length){ const rm={}; v.records.forEach(r=>{ if(r&&r.id) rm[r.id]={emp:r.emp,t:r.t,type:r.type}; }); cloud.records.update(rm).catch(()=>{}); }
+          ['store_name','admin_pass','footer','employees','records'].forEach(k=>base.child(k).remove().catch(()=>{}));
+        }
+        attachCloudListeners();
+      }).catch(()=>{ attachCloudListeners(); });
     }catch(e){ cloud.on=false; }
   }
   updateSyncBadge();
+}
+function attachCloudListeners(){
+  cloud.meta.on('value',snap=>{
+    const m=snap.val();
+    if(m&&Array.isArray(m.employees)){
+      store.store_name=m.store_name||store.store_name;
+      if(/^\d{6}$/.test(m.admin_pass||'')) store.admin_pass=m.admin_pass;
+      if(typeof m.footer==='string') store.footer=m.footer;
+      store.employees=m.employees;
+      const fc=document.getElementById('footCredit'); if(fc) fc.textContent=store.footer;
+      scheduleRender();
+    } else if(cloud.meta){ cloud.meta.set(metaObj()).catch(()=>{}); }   // クラウドのメタが空なら初期化
+  });
+  cloud.records.on('child_added',s=>{ recMap.set(s.key,{id:s.key,...s.val()}); scheduleRender(); });
+  cloud.records.on('child_changed',s=>{ recMap.set(s.key,{id:s.key,...s.val()}); scheduleRender(); });
+  cloud.records.on('child_removed',s=>{ recMap.delete(s.key); scheduleRender(); });
 }
 function updateSyncBadge(){
   const b=document.getElementById('syncBadge');
@@ -498,8 +548,7 @@ function punchBreak(){
 }
 function punch(type){
   if(!curEmp)return;
-  store.records.push({id:uid(),emp:curEmp.id,type,t:Date.now()});
-  save();
+  putRecord({id:uid(),emp:curEmp.id,type,t:Date.now()});
   refreshPunchUI();
   const t=new Date();
   toast(`${curEmp.name} さん  ${type}  ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`);
@@ -514,7 +563,7 @@ function openMemo(){
     <textarea id="memoT" rows="8" style="width:100%;padding:12px;border:1px solid #cdbb92;border-radius:10px;font-size:15px">${esc(e.memo||'')}</textarea>
     <div style="text-align:right;margin-top:12px"><button class="mini go" onclick="saveMemo()">保存</button></div>`);
 }
-function saveMemo(){ curEmp.memo=document.getElementById('memoT').value; save(); closeModal('modal-generic'); toast('メモを保存しました'); }
+function saveMemo(){ curEmp.memo=document.getElementById('memoT').value; saveMeta(); closeModal('modal-generic'); toast('メモを保存しました'); }
 
 function openEdit(){
   const e=curEmp;
@@ -616,16 +665,18 @@ function saveEmp(fromPunch){
   }else{
     store.employees.push({id:uid(),name,color:pickColor,female,memo:''});
   }
-  save(); closeModal('modal-generic');
+  saveMeta(); closeModal('modal-generic');
   if(fromPunch){ showPunch(); } else renderEmpPane();
   renderMembers(); toast('保存しました');
 }
 function admDelEmp(id){
   const e=store.employees.find(x=>x.id===id);
   confirmBox(`「${e.name}」を削除しますか？<br><small style="color:#a24a2c">打刻記録も一緒に削除されます。</small>`,()=>{
+    const ids=[...recMap.values()].filter(r=>r.emp===id).map(r=>r.id);
     store.employees=store.employees.filter(x=>x.id!==id);
-    store.records=store.records.filter(r=>r.emp!==id);
-    save(); renderEmpPane(); renderMembers(); toast('削除しました');
+    delRecordsBulk(ids);   // その従業員の打刻を一括削除
+    saveMeta();            // 従業員一覧を更新
+    renderEmpPane(); renderMembers(); toast('削除しました');
   });
 }
 
@@ -748,11 +799,10 @@ function saveRec(){
   const emp=document.getElementById('rf-emp').value;
   const t=new Date(document.getElementById('rf-date').value+'T'+document.getElementById('rf-time').value+':00').getTime();
   const type=document.getElementById('rf-type').value;
-  if(id){ const r=store.records.find(x=>x.id===id); r.emp=emp;r.t=t;r.type=type; }
-  else store.records.push({id:uid(),emp,t,type});
-  save(); closeModal('modal-generic'); renderRecTable(); toast('保存しました');
+  putRecord({id:id||uid(),emp,t,type});
+  closeModal('modal-generic'); renderRecTable(); toast('保存しました');
 }
-function admDelRec(id){ confirmBox('この打刻を削除しますか？',()=>{ store.records=store.records.filter(r=>r.id!==id);save();closeModal('modal-generic');renderRecTable();toast('削除しました'); }); }
+function admDelRec(id){ confirmBox('この打刻を削除しますか？',()=>{ delRecord(id);closeModal('modal-generic');renderRecTable();toast('削除しました'); }); }
 function exportMonthCSV(){
   const {ym,y,m,from,to}=monthBounds();
   const empF=document.getElementById('rec-emp').value;
@@ -822,9 +872,9 @@ function saveSet(){
   store.store_name=document.getElementById('set-store').value.trim()||store.store_name;
   store.footer=document.getElementById('set-foot').value;
   store.admin_pass=pw;
-  save(); document.getElementById('footCredit').textContent=store.footer; toast('設定を保存しました');
+  saveMeta(); document.getElementById('footCredit').textContent=store.footer; toast('設定を保存しました');
 }
-function wipeRecords(){ confirmBox('すべての打刻記録を削除しますか？<br><small style="color:#a24a2c">従業員は残ります。元に戻せません。</small>',()=>{ store.records=[];save();renderSetPane();toast('打刻記録を削除しました'); }); }
+function wipeRecords(){ confirmBox('すべての打刻記録を削除しますか？<br><small style="color:#a24a2c">従業員は残ります。元に戻せません。</small>',()=>{ clearRecordsAll();renderSetPane();toast('打刻記録を削除しました'); }); }
 
 /* ============ 汎用UI ============ */
 function openModal(id){ document.getElementById(id).classList.add('on'); }

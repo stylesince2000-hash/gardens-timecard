@@ -121,6 +121,14 @@
   .nm-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
   .p-status{font-size:14px;font-weight:800;color:#fff;padding:5px 14px;border-radius:8px;white-space:nowrap;}
   .p-hint{text-align:center;color:var(--ink-soft);font-weight:600;margin:10px 0 14px;}
+  .p-msg{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:#fff6d8;border:1px solid #e6c96a;border-radius:12px;
+    padding:12px 14px;margin:4px 0 12px;box-shadow:var(--shadow);}
+  .p-msg-ic{font-size:22px;}
+  .p-msg-text{flex:1;min-width:140px;font-size:17px;line-height:1.45;font-weight:700;color:#6a5320;white-space:pre-wrap;}
+  .p-msg-ok{padding:9px 18px;border-radius:9px;border:1px solid #cdbb92;background:#efe7d2;
+    color:var(--ink);font-weight:800;cursor:pointer;font-size:15px;}
+  .p-msg-ok:active{transform:translateY(1px);}
   .p-actions{width:100%;}
   .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
   .abtn{padding:30px 6px;border-radius:12px;border:none;font-size:22px;font-weight:800;
@@ -259,6 +267,11 @@
           <span class="p-status" id="pStatus">未出勤</span>
         </div>
       </div>
+    </div>
+    <div class="p-msg" id="pMsg" style="display:none">
+      <span class="p-msg-ic">📢</span>
+      <span class="p-msg-text" id="pMsgText"></span>
+      <button class="p-msg-ok" onclick="ackMessage()">確認</button>
     </div>
     <div class="p-hint">いずれかのボタンを押してください</div>
     <div class="p-actions">
@@ -567,8 +580,22 @@ function showPunch(){
   const e=curEmp;
   document.getElementById('pAvatar').innerHTML=avatarSVG(e,64);
   document.getElementById('pName').textContent=`氏名：${e.name}`;
+  showPunchMessage();
   refreshPunchUI();
   openModal('modal-punch');
+}
+function showPunchMessage(){
+  const msg=(curEmp.message||'').trim();
+  const pm=document.getElementById('pMsg');
+  if(msg){ document.getElementById('pMsgText').textContent=msg; pm.style.display='flex'; }
+  else { pm.style.display='none'; }
+}
+function ackMessage(){
+  if(!curEmp)return;
+  curEmp.message='';
+  saveMeta();
+  document.getElementById('pMsg').style.display='none';
+  toast('メッセージを確認しました');
 }
 function refreshPunchUI(){
   const st=statusOf(curEmp.id);
@@ -688,6 +715,8 @@ function empForm(e,fromPunch){
     </div>
     <div class="field" style="margin-top:6px"><label>アイコン色</label>
       <div class="swatches" data-group="color">${AV_COLORS.map(c=>`<div class="sw ${c===(e.color||AV_COLORS[0])?'sel':''}" data-c="${c}" style="background:${c}"></div>`).join('')}</div></div>
+    ${fromPunch?'':`<div class="field"><label>本人へのメッセージ（打刻画面に表示・空欄で非表示）</label>
+      <textarea id="ef-msg" rows="2" placeholder="例：明日は10時出勤でお願いします">${esc(e.message||'')}</textarea></div>`}
     <div style="text-align:right;margin-top:8px">
       ${fromPunch?'':`<button class="mini" onclick="closeModal('modal-generic')">キャンセル</button>`}
       <button class="mini go" onclick="saveEmp(${fromPunch})">保存</button></div>`;
@@ -710,12 +739,14 @@ function saveEmp(fromPunch){
   const name=document.getElementById('ef-name').value.trim();
   if(!name){ toast('氏名を入力してください');return; }
   const female=document.getElementById('ef-female').value==='1';
+  const msgEl=document.getElementById('ef-msg');   // 管理画面の編集時のみ存在
   if(id){
     const e=store.employees.find(x=>x.id===id);
     e.name=name; e.color=pickColor; e.female=female;
+    if(msgEl) e.message=msgEl.value.trim();
     if(fromPunch&&curEmp&&curEmp.id===id)curEmp=e;
   }else{
-    store.employees.push({id:uid(),name,color:pickColor,female,memo:''});
+    store.employees.push({id:uid(),name,color:pickColor,female,memo:'',message:msgEl?msgEl.value.trim():''});
   }
   saveMeta(); closeModal('modal-generic');
   if(fromPunch){ showPunch(); } else renderEmpPane();

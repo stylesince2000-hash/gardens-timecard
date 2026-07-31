@@ -620,7 +620,7 @@ function updatePunchButtons(st){
 function punchWork(){
   if(!curEmp)return;
   const st=statusOf(curEmp.id);
-  if(st==='出勤'){ punch('退勤'); return; }
+  if(st==='出勤'){ confirmClockOut(); return; }   // 退勤は確認を入れる
   if(st==='退勤'){
     // 本日すでに退勤済みで再度「出勤」→「休憩の押し間違い」とみなし自動訂正
     const [from,to]=todayRange();
@@ -638,6 +638,15 @@ function punchBreak(){
   if(!curEmp)return;
   punch(statusOf(curEmp.id)==='休憩' ? '休憩戻り' : '休憩開始');
 }
+function confirmClockOut(){
+  gen(`<h3 style="margin-top:0">${esc(curEmp.name)} さん</h3>
+    <p style="font-size:19px;text-align:center;margin:8px 0 20px;font-weight:700">退勤しますか？</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <button style="padding:18px;font-size:17px;font-weight:800;border-radius:10px;border:1px solid #cdbb92;background:#efe7d2;color:var(--ink);cursor:pointer" onclick="closeModal('modal-generic')">キャンセル</button>
+      <button style="padding:18px;font-size:18px;font-weight:800;border-radius:10px;border:none;background:var(--brown2);color:#fff;cursor:pointer" onclick="doClockOut()">退勤する</button>
+    </div>`);
+}
+function doClockOut(){ closeModal('modal-generic'); punch('退勤'); }
 function punch(type){
   if(!curEmp)return;
   putRecord({id:uid(),emp:curEmp.id,type,t:Date.now()});

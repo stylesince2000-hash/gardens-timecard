@@ -326,6 +326,7 @@
    GARDENS タイムカード  (単一ファイル / localStorage + Firebase同期)
    ============================================================ */
 const KEY='gardensTimecard_v1';
+const APP_VERSION='2026-07-31-1';   // ★デプロイのたびに version.json と同じ値へ上げる（開きっぱなし端末の自動更新用）
 const WD=['日','月','火','水','木','金','土'];
 const AV_COLORS=['#5aa85f','#4a90d9','#ef8f3a','#c0603f','#8e7cc3','#d9a441','#5bb8b0','#c25b8e'];
 const TYPES=['出勤','退勤','休憩開始','休憩戻り'];
@@ -1061,6 +1062,20 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 ['gesturestart','gesturechange','gestureend'].forEach(ev=>
   document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
 
+// 自動アップデート：version.json を見て新しければ再読み込み（開きっぱなし端末・ホーム画面アプリのキャッシュ対策）
+async function checkVersion(){
+  try{
+    const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});
+    if(!r.ok) return;
+    const j=await r.json();
+    if(j&&j.v&&j.v!==APP_VERSION){
+      location.replace(location.pathname+'?v='+encodeURIComponent(j.v));  // キャッシュを確実に回避して最新取得
+    }
+  }catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkVersion(); });
+setInterval(checkVersion, 5*60*1000);
+
 function boot(){
   document.getElementById('logoBox').innerHTML=
     `<img src="logo.png" alt="GARDENS" onerror="this.remove();document.getElementById('logoTxt').style.display='block'">`+
@@ -1069,6 +1084,7 @@ function boot(){
   initCloud();
   document.getElementById('footCredit').textContent=store.footer;
   renderMembers();
+  setTimeout(checkVersion, 3000);   // 起動直後にも最新版チェック
 }
 boot();
 </script>

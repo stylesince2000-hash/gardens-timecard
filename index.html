@@ -619,7 +619,20 @@ function updatePunchButtons(st){
 }
 function punchWork(){
   if(!curEmp)return;
-  punch(statusOf(curEmp.id)==='出勤' ? '退勤' : '出勤');
+  const st=statusOf(curEmp.id);
+  if(st==='出勤'){ punch('退勤'); return; }
+  if(st==='退勤'){
+    // 本日すでに退勤済みで再度「出勤」→「休憩の押し間違い」とみなし自動訂正
+    const [from,to]=todayRange();
+    const lastOut=[...recsOf(curEmp.id).filter(r=>r.t>=from&&r.t<to)].reverse().find(r=>r.type==='退勤');
+    if(lastOut){
+      putRecord({...lastOut,type:'休憩開始'});   // 直前の退勤を休憩開始に変換
+      punch('休憩戻り');                          // 今回を休憩戻りとして記録
+      toast(`${curEmp.name} さん  休憩戻り（退勤の押し間違いを休憩に訂正）`);
+      return;
+    }
+  }
+  punch('出勤');   // 未出勤（通常の出勤）
 }
 function punchBreak(){
   if(!curEmp)return;
@@ -850,9 +863,28 @@ function dayDetail(empId,ymd){
       <td style="text-align:right"><button class="mini" onclick="admEditRec('${r.id}')">訂正</button>
         <button class="mini danger" onclick="admDelRec('${r.id}')">削除</button></td></tr>`).join('')
     ||'<tr><td colspan="3" class="empty">記録なし</td></tr>';
+  // 「退勤のあとに再び出勤」がある＝休憩の押し間違いの可能性
+  const hasPattern=rs.some((r,i)=>r.type==='退勤'&&rs.slice(i+1).some(x=>x.type==='出勤'));
   gen(`<h3 style="margin-top:0">${esc(e.name)}　${M}/${D}(${WD[new Date(from).getDay()]}) の打刻</h3>
     <table><thead><tr><th>時刻</th><th>種別</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    ${hasPattern?`<div style="margin-top:12px"><button class="mini" style="border-color:#e6c96a;background:#fff6d8;font-weight:800" onclick="convertDayBreaks('${empId}','${ymd}')">🔧 退勤の押し間違いを休憩に変換</button></div>`:''}
     <div style="text-align:right;margin-top:12px"><button class="mini go" onclick="admAddRec('${empId}','${ymd}')">＋ この日に追加</button></div>`);
+}
+function convertDayBreaks(empId,ymd){
+  const from=new Date(ymd+'T00:00:00').getTime(), to=from+86400000;
+  const rs=store.records.filter(r=>r.emp===empId&&r.t>=from&&r.t<to).sort((a,b)=>a.t-b.t);
+  const changes=[];
+  for(let i=0;i<rs.length;i++){
+    if(rs[i].type==='退勤'){
+      let j=i+1; while(j<rs.length&&rs[j].type!=='出勤') j++;
+      if(j<rs.length){ changes.push({...rs[i],type:'休憩開始'},{...rs[j],type:'休憩戻り'}); i=j; }
+    }
+  }
+  if(!changes.length){ toast('変換できる「退勤→出勤」がありません'); return; }
+  confirmBox(`この日の「退勤→出勤」${changes.length/2}組を「休憩」に変換します。<br>（出勤/退勤はそのまま、間の退勤→出勤だけ休憩開始→休憩戻りにします）`,()=>{
+    changes.forEach(c=>putRecord(c));
+    closeModal('modal-generic'); renderRecTable(); toast('休憩に変換しました');
+  });
 }
 function admAddRec(emp,ymd){ recForm(null,{emp:emp||'',ymd:ymd||''}); }
 function admEditRec(id){ recForm(store.records.find(r=>r.id===id)); }

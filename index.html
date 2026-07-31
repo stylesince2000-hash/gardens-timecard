@@ -185,6 +185,10 @@
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
   .num{font-variant-numeric:tabular-nums;}
   .empty{color:var(--ink-soft);text-align:center;padding:30px;font-weight:600;}
+  .histseg{display:flex;gap:8px;margin:0 0 12px;}
+  .histseg button{flex:1;padding:11px;border-radius:9px;border:1px solid #cdbb92;background:#efe7d2;font-weight:700;color:var(--ink);cursor:pointer;font-size:15px;}
+  .histseg button.on{background:var(--brown2);color:#fff;border-color:var(--brown2);}
+  .badge2{display:inline-block;padding:3px 10px;border-radius:6px;background:#efe7d2;font-weight:700;font-size:13px;}
 
   /* パスワード入力パッド */
   .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:280px;margin:14px auto 0;}
@@ -326,7 +330,7 @@
    GARDENS タイムカード  (単一ファイル / localStorage + Firebase同期)
    ============================================================ */
 const KEY='gardensTimecard_v1';
-const APP_VERSION='2026-07-31-1';   // ★デプロイのたびに version.json と同じ値へ上げる（開きっぱなし端末の自動更新用）
+const APP_VERSION='2026-07-31-2';   // ★デプロイのたびに version.json と同じ値へ上げる（開きっぱなし端末の自動更新用）
 const WD=['日','月','火','水','木','金','土'];
 const AV_COLORS=['#5aa85f','#4a90d9','#ef8f3a','#c0603f','#8e7cc3','#d9a441','#5bb8b0','#c25b8e'];
 const TYPES=['出勤','退勤','休憩開始','休憩戻り'];
@@ -672,17 +676,25 @@ function openEdit(){
   gen(empForm(e,true));
   bindSwatches();
 }
-function openHistory(){ showHistory(curEmp); }
-function showHistory(e){
-  const rs=recsOf(e.id).slice().reverse().slice(0,120);
+let histMode='today';
+function openHistory(){ histMode='today'; showHistory(); }
+function showHistory(){
+  const e=curEmp; if(!e)return;
+  const now=new Date();
+  const [from,to] = histMode==='month' ? monthRange() : todayRange();
+  const rs=recsOf(e.id).filter(r=>r.t>=from&&r.t<to).sort((a,b)=>b.t-a.t);  // 新しい順
   const rows=rs.map(r=>{
     const d=new Date(r.t);
     return `<tr><td class="num">${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})</td>
       <td class="num">${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</td>
       <td><span class="badge2">${r.type}</span></td></tr>`;
-  }).join('')||'<tr><td colspan="3" class="empty">記録がありません</td></tr>';
+  }).join('')||`<tr><td colspan="3" class="empty">${histMode==='month'?'今月':'本日'}の記録はありません</td></tr>`;
   gen(`<h3 style="margin-top:0">🕒 ${esc(e.name)} さんの勤怠履歴</h3>
-    <div style="max-height:60vh;overflow:auto"><table>
+    <div class="histseg">
+      <button class="${histMode==='today'?'on':''}" onclick="histMode='today';showHistory()">本日</button>
+      <button class="${histMode==='month'?'on':''}" onclick="histMode='month';showHistory()">${now.getMonth()+1}月分</button>
+    </div>
+    <div style="max-height:56vh;overflow:auto"><table>
       <thead><tr><th>日付</th><th>時刻</th><th>種別</th></tr></thead><tbody>${rows}</tbody></table></div>`);
 }
 
